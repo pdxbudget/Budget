@@ -1,0 +1,1079 @@
+<title>Budget Treemap with DPs</title>
+<meta name="description" content="Mockup: Portland's FY 2026-27 Adopted Budget treemap with Fall Supplemental decision packages, program descriptions and the requests that change each program.">
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Public+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: civic ledger — a slim masthead with the headline total, one control row, then the treemap beside a ranked ledger panel that stacks below on phones. */
+:root{
+  /* Single dark look, used in every browser regardless of system theme */
+  --bg:#0f1114; --surface:#171a1f; --ink:#eef0f3; --ink-2:#b8bec7; --muted:#878e99;
+  --line:#2a2f37; --line-strong:#3a414b; --focus:#86b6ef; --chip:#eef0f3; --chip-ink:#13161b;
+  --mix:44%; --mix-hover:60%; --mix-group:14%;
+  --c0:#3987e5; --c1:#d95926; --c2:#199e70; --c3:#c98500; --c4:#d55181; --c5:#008300; --c6:#9085e9; --c7:#e66767;
+  --font-ui:"Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-label:"Barlow Semi Condensed", "Arial Narrow", system-ui, sans-serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--ink);font-family:var(--font-ui);font-size:15px;line-height:1.5;
+  padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px));padding-block:20px 40px}
+.wrap{max-width:1280px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+header.mast{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px 32px;border-bottom:1px solid var(--line);padding-bottom:16px}
+.eyebrow{font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0}
+h1{font-family:var(--font-label);font-weight:700;font-size:clamp(26px,4vw,38px);line-height:1.1;margin:4px 0 0;text-wrap:balance}
+.headline{text-align:right;min-width:0}
+.headline .num{font-family:var(--font-label);font-weight:700;font-size:clamp(30px,5vw,46px);line-height:1;letter-spacing:-.01em}
+.headline .cap{font-size:13px;color:var(--ink-2);margin-top:4px}
+@media (max-width:640px){.headline{text-align:left}}
+
+.controls{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:flex-end}
+.ctl{display:flex;flex-direction:column;gap:6px}
+.ctl-label{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.seg{display:inline-flex;border:1px solid var(--line-strong);border-radius:8px;padding:2px;background:var(--surface);gap:2px}
+.seg input{position:absolute;opacity:0;pointer-events:none}
+.seg label{padding:6px 12px;border-radius:6px;font-size:14px;font-weight:500;color:var(--ink-2);cursor:pointer;white-space:nowrap;user-select:none}
+.seg label:hover{color:var(--ink);background:color-mix(in oklab, var(--ink) 6%, transparent)}
+.seg input:checked + label{background:var(--chip);color:var(--chip-ink)}
+.seg input:focus-visible + label{outline:2px solid var(--focus);outline-offset:2px}
+.ctl[aria-disabled="true"]{opacity:.4}
+.ctl[aria-disabled="true"] label{cursor:not-allowed}
+
+.crumbs{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;font-size:14px;min-height:28px}
+.crumbs button{all:unset;cursor:pointer;color:var(--ink-2);font-weight:500;padding:2px 4px;border-radius:4px}
+.crumbs button:hover{color:var(--ink);text-decoration:underline}
+.crumbs button:focus-visible{outline:2px solid var(--focus)}
+.crumbs .here{font-weight:700;color:var(--ink);padding:2px 4px}
+.crumbs .sep{color:var(--muted)}
+.crumbs .lvl{margin-left:auto;font-size:12px;color:var(--muted)}
+
+.main{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:20px;align-items:start}
+@media (max-width:900px){.main{grid-template-columns:minmax(0,1fr)}}
+.chart-col{display:flex;flex-direction:column;gap:8px;min-width:0}
+#tm{position:relative;width:100%;height:600px;background:var(--surface);border:1px solid var(--line);border-radius:6px;overflow:hidden}
+@media (max-width:900px){#tm{height:480px}}
+@media (max-width:480px){#tm{height:420px}}
+.tile{position:absolute;all:unset;position:absolute;box-sizing:border-box;cursor:pointer;overflow:hidden;
+  background:color-mix(in oklab, var(--c) var(--mix), var(--surface));color:var(--ink);
+  padding:6px 7px;display:flex;flex-direction:column;gap:1px;border-radius:2px;
+  transition:left .32s ease, top .32s ease, width .32s ease, height .32s ease, background-color .15s}
+.tile:hover,.tile.sel{background:color-mix(in oklab, var(--c) var(--mix-hover), var(--surface))}
+.tile.sel{box-shadow:inset 0 0 0 2px var(--ink)}
+.tile:focus-visible{outline:2px solid var(--focus);outline-offset:-2px;z-index:3}
+.tile .nm{font-family:var(--font-label);font-weight:600;line-height:1.12;overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;overflow-wrap:break-word;hyphens:auto}
+.tile .vl{font-family:var(--font-label);font-weight:500;color:var(--ink-2);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.group{position:absolute;box-sizing:border-box;background:color-mix(in oklab, var(--c) var(--mix-group), var(--surface));border-radius:3px;
+  transition:left .32s ease, top .32s ease, width .32s ease, height .32s ease}
+.ghead{all:unset;position:absolute;box-sizing:border-box;left:0;top:0;right:0;height:22px;padding:2px 7px;cursor:pointer;
+  font-family:var(--font-label);font-weight:700;font-size:13px;letter-spacing:.02em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--ink)}
+.ghead:hover{text-decoration:underline}
+.ghead:focus-visible{outline:2px solid var(--focus);outline-offset:-2px}
+.ghead .gv{font-weight:500;color:var(--ink-2);text-transform:none;margin-left:6px;font-variant-numeric:tabular-nums}
+.empty{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;padding:24px;color:var(--ink-2)}
+.empty button,.btn{all:unset;cursor:pointer;border:1px solid var(--line-strong);border-radius:6px;padding:6px 12px;font-weight:600;color:var(--ink);background:var(--surface)}
+.empty button:focus-visible,.btn:focus-visible{outline:2px solid var(--focus)}
+.hint{font-size:13px;color:var(--muted)}
+.notes{font-size:13px;color:var(--ink-2)}
+.notes:empty{display:none}
+
+aside.panel{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:16px;display:flex;flex-direction:column;gap:18px;min-width:0}
+.panel h2{font-family:var(--font-label);font-size:19px;font-weight:700;margin:0;line-height:1.2;text-wrap:balance}
+.panel h3{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 0 6px}
+.panel .sub{font-size:13px;color:var(--ink-2);margin:2px 0 0}
+.ledger{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.ledger li{border-top:1px solid var(--line)}
+.ledger li:first-child{border-top:0}
+.row{all:unset;box-sizing:border-box;display:grid;grid-template-columns:10px minmax(0,1fr) auto;gap:2px 8px;align-items:center;width:100%;padding:7px 2px;cursor:pointer;border-radius:4px}
+.row.static{cursor:default}
+.row:hover:not(.static),.row.sel{background:color-mix(in oklab, var(--ink) 5%, transparent)}
+.row:focus-visible{outline:2px solid var(--focus)}
+.sw{width:10px;height:10px;border-radius:2px;background:var(--c)}
+.row .n{font-size:14px;min-width:0;overflow-wrap:anywhere;line-height:1.3}
+.row .v{font-size:14px;font-weight:600;font-variant-numeric:tabular-nums;text-align:right}
+.row .bar{grid-column:2 / 4;height:4px;border-radius:2px;background:var(--line);overflow:hidden}
+.row .bar i{display:block;height:100%;background:var(--c);border-radius:2px}
+.row .pct{color:var(--muted);font-weight:500;font-size:12px;margin-left:6px}
+.scroll{max-height:420px;overflow-y:auto;margin-right:-6px;padding-right:6px}
+.cats .row{cursor:default}
+
+#tip{position:fixed;z-index:20;pointer-events:none;max-width:300px;background:var(--surface);color:var(--ink);border:1px solid var(--line-strong);
+  border-radius:6px;padding:10px 12px;box-shadow:0 6px 24px rgba(0,0,0,.45);font-size:13px;line-height:1.4}
+#tip .t{font-weight:700;font-size:14px;margin-bottom:2px}
+#tip .big{font-family:var(--font-label);font-size:22px;font-weight:700;font-variant-numeric:tabular-nums}
+#tip .m{color:var(--ink-2)}
+#tip .k{color:var(--muted);font-size:12px;margin-top:6px}
+#tip table{border-collapse:collapse;width:100%;margin-top:6px;font-variant-numeric:tabular-nums}
+#tip td{padding:1px 0;color:var(--ink-2)}
+#tip td:last-child{text-align:right;color:var(--ink)}
+
+footer.src{border-top:1px solid var(--line);padding-top:14px;font-size:13px;color:var(--ink-2);display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px 28px}
+footer.src p{margin:0;max-width:62ch}
+footer.src b{color:var(--ink)}
+@media (prefers-reduced-motion: reduce){.tile,.group{transition:none}}
+/* ---- decision packages ---- */
+:root{--up:#7db4f0;--down:#f0936b}
+.up{color:var(--up)} .down{color:var(--down)} .z{color:var(--muted)}
+.tile.neg{background:repeating-linear-gradient(135deg, color-mix(in oklab, var(--c) var(--mix), var(--surface)) 0 7px, color-mix(in oklab, var(--c) 20%, var(--surface)) 7px 12px)}
+.tile.neg:hover,.tile.neg.sel{background:repeating-linear-gradient(135deg, color-mix(in oklab, var(--c) var(--mix-hover), var(--surface)) 0 7px, color-mix(in oklab, var(--c) 30%, var(--surface)) 7px 12px)}
+.row.neg .bar i{background:repeating-linear-gradient(135deg, var(--c) 0 3px, transparent 3px 5px)}
+.row .dpc{display:block;font-size:12px;font-weight:500;margin-top:1px}
+.samp{text-transform:none;letter-spacing:0;font-weight:500;color:var(--muted);border:1px dashed var(--line-strong);border-radius:999px;padding:0 6px;margin-left:4px}
+.seg label .dot,.seg label .ring{vertical-align:1px;margin-right:2px}
+.seg input:checked + label .dot{background:var(--chip-ink)}
+.seg input:checked + label .ring{box-shadow:inset 0 0 0 1.5px var(--chip-ink)}
+@media (max-width:560px){.seg{flex-wrap:wrap}.controls .ctl{max-width:100%}}
+.controls{flex-direction:column;align-items:stretch;gap:14px}
+.crow{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:flex-end}
+/* side panel: same height as the treemap, scrolls inside, expandable */
+aside.panel{max-height:600px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--line-strong) transparent}
+@media (max-width:900px){aside.panel{max-height:480px}}
+@media (max-width:480px){aside.panel{max-height:420px}}
+aside.panel.open{max-height:none;overflow:visible}
+aside.panel .scroll{max-height:none;overflow:visible;margin-right:0;padding-right:0}
+.pexp{position:sticky;bottom:-16px;margin:-8px -16px -16px;padding:18px 16px 12px;background:linear-gradient(to bottom, transparent, var(--surface) 45%);display:flex;justify-content:center}
+aside.panel.open .pexp{position:static;background:none;padding-top:4px}
+.pexp button{all:unset;cursor:pointer;font-size:13px;font-weight:600;color:var(--ink);border:1px solid var(--line-strong);border-radius:999px;padding:5px 14px;background:var(--surface)}
+.pexp button:hover{border-color:var(--muted)}
+.pexp button:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.tmview{display:flex;flex-direction:column;gap:18px}
+/* commitment item drill-down */
+.cx{all:unset;cursor:pointer;display:inline-flex;gap:6px;align-items:baseline}
+.cx:hover{text-decoration:underline;text-decoration-color:var(--line-strong);text-underline-offset:3px}
+.cx:focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:2px}
+.cx .car{color:var(--muted);width:9px;flex:none;font-size:11px}
+.cxs{padding-left:15px;display:inline-block}
+tr.ci td{font-size:12.5px;color:var(--ink-2);background:color-mix(in oklab, var(--ink) 2.5%, transparent)}
+tr.ci td:first-child{padding-left:15px!important}
+tr.ci td.up,tr.ci td.down{font-size:12.5px}
+.row .n .cx{display:inline-flex}
+ul.cil{list-style:none;margin:0 0 6px 18px;padding:0;border-left:1px solid var(--line-strong)}
+ul.cil li{display:flex;justify-content:space-between;gap:10px;padding:4px 2px 4px 10px;font-size:12.5px;color:var(--ink-2);border-top:1px solid var(--line)}
+ul.cil li:first-child{border-top:0}
+ul.cil .cn{min-width:0;overflow-wrap:anywhere}
+ul.cil .cv{font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--ink)}
+/* program-level DP cards: link to full DP, partial-amount tag */
+.dtop h3 a{color:inherit;text-decoration:none;border-bottom:1px solid var(--line-strong)}
+.dtop h3 a:hover{border-bottom-color:var(--ink)}
+.dtop h3 a:focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:2px}
+.ptag{display:inline-block;vertical-align:3px;margin-left:8px;font-family:var(--font-ui);font-size:11.5px;font-weight:600;color:#f0c060;border:1px solid color-mix(in oklab, #f0c060 55%, transparent);border-radius:999px;padding:1px 8px;white-space:nowrap}
+.ptag.whole{color:var(--muted);border-color:var(--line-strong)}
+.dfull{display:inline-block;margin-top:10px;font-size:13.5px;font-weight:600;color:var(--focus);text-decoration:none}
+.dfull:hover{text-decoration:underline}
+/* full decision package page */
+#dppage{display:flex;flex-direction:column;gap:22px}
+#dppage .back{all:unset;cursor:pointer;font-size:14px;color:var(--ink-2);font-weight:500;align-self:flex-start}
+#dppage .back:hover{color:var(--ink);text-decoration:underline}
+#dppage .back:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.dph{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:12px 32px;border-bottom:1px solid var(--line);padding-bottom:16px}
+.dph h1{font-family:var(--font-label);font-weight:700;font-size:clamp(26px,4vw,38px);line-height:1.1;margin:4px 0 0;max-width:30ch;text-wrap:balance}
+.dph .meta{font-size:14px;color:var(--ink-2);margin:8px 0 0;display:flex;flex-wrap:wrap;gap:4px 18px;align-items:center}
+.dph .meta span{display:inline-flex;gap:6px;align-items:center}
+.dph .num{font-family:var(--font-label);font-weight:700;font-size:clamp(30px,5vw,46px);line-height:1;text-align:right;font-variant-numeric:tabular-nums}
+.dph .cap{font-size:13px;color:var(--ink-2);margin-top:4px;text-align:right}
+@media (max-width:640px){.dph .num,.dph .cap{text-align:left}}
+.dpgrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22px 32px}
+@media (max-width:900px){.dpgrid{grid-template-columns:minmax(0,1fr)}}
+.dpcard{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:16px 18px;min-width:0}
+.dpcard h2{font-family:var(--font-label);font-size:20px;font-weight:700;margin:0 0 4px}
+.dpcard .sub{font-size:13px;color:var(--muted);margin:0 0 10px}
+.dpcard p.txt{font-size:15px;line-height:1.6;color:var(--ink-2);margin:0;max-width:80ch}
+.dpcard h3{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:16px 0 6px}
+.dpcard h3:first-child{margin-top:0}
+.dpcard table{border-collapse:collapse;width:100%;font-size:13.5px;font-variant-numeric:tabular-nums}
+.dpcard th{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);text-align:right;padding:7px 10px;border-bottom:1px solid var(--line-strong);white-space:nowrap;vertical-align:bottom}
+.dpcard td{text-align:right;padding:7px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+.dpcard th:first-child,.dpcard td:first-child{text-align:left;padding-left:0;white-space:normal;min-width:160px}
+.dpcard tr.g td{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding-top:14px;border-bottom:0}
+.dpcard tr.tot td{font-weight:700;border-top:1px solid var(--line-strong)}
+.dpcard tr.net td{font-weight:700;border-top:2px solid var(--line-strong);border-bottom:0}
+.dpcard td.ok{color:#5fd0a3;font-weight:600}
+.dpcard td.off{color:#f0c060}
+.dpcard td small,.dpcard td .pj{display:block;color:var(--muted);font-size:12px;font-weight:400}
+.dpcard tr.go{cursor:pointer}
+.dpcard tr.go:hover td{background:color-mix(in oklab, var(--ink) 4%, transparent)}
+.dpcard tr.go td:first-child .pl{color:var(--ink);text-decoration:underline;text-decoration-color:var(--line-strong);text-underline-offset:3px}
+.dpcard .tnote{font-size:12.5px;color:var(--muted);margin:8px 0 0}
+.mocknote{font-size:13px;color:var(--ink-2);margin:-6px 0 0;max-width:110ch}
+.mocknote b{color:var(--ink)}
+.mocknote a{color:var(--ink-2)}
+.dot,.ring{display:inline-block;width:8px;height:8px;border-radius:50%;flex:none}
+.dot{background:var(--ink)} .ring{box-shadow:inset 0 0 0 1.5px var(--ink)}
+#narr{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:18px 20px}
+#narr .nh{font-family:var(--font-label);font-size:22px;font-weight:700;margin:0 0 8px;line-height:1.2}
+.ntext,.nlead,.nlist p{font-size:15.5px;line-height:1.6;color:var(--ink-2);margin:0;max-width:82ch;white-space:pre-line}
+.ntext.clamp{display:-webkit-box;-webkit-line-clamp:5;-webkit-box-orient:vertical;overflow:hidden}
+.nserv{font-size:13.5px;color:var(--muted);margin:10px 0 0;max-width:82ch}
+.nserv.clamp1{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.nserv b,.nlist .nlink{color:var(--ink)}
+.nlead{margin-bottom:10px;color:var(--muted);font-size:14px}
+.nlist{display:flex;flex-direction:column;gap:10px}
+.nlist p{white-space:normal}
+.nlink{all:unset;cursor:pointer;font-weight:700;text-decoration:underline;text-decoration-color:var(--line-strong);text-underline-offset:3px}
+.nlink:hover{text-decoration-color:var(--ink)}
+.nlink:focus-visible,.nmore:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.none{color:var(--muted);font-style:italic}
+.nmore{all:unset;cursor:pointer;color:var(--focus);font-size:13.5px;font-weight:500;margin:10px 16px 0 0;display:inline-block}
+.nmore:hover{text-decoration:underline}
+#dps{display:flex;flex-direction:column;gap:16px}
+.gtools{display:flex;gap:4px;margin-top:-6px}
+.gtools .nmore{margin:0 14px 0 0}
+.gtable{background:var(--surface);border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.gtable.nested{border:0;border-radius:0;background:transparent;margin:0 0 0 18px;border-left:1px solid var(--line-strong)}
+.grow{all:unset;box-sizing:border-box;display:grid;grid-template-columns:minmax(0,1fr) 72px 110px 140px 110px 70px;gap:10px;align-items:center;width:100%;padding:10px 14px;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums;font-size:14px}
+.grow > span:not(:first-child){text-align:right;white-space:nowrap}
+button.grow{cursor:pointer}
+button.grow:hover{background:color-mix(in oklab, var(--ink) 5%, transparent)}
+button.grow:focus-visible{outline:2px solid var(--focus);outline-offset:-2px}
+.grow.ghd{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);border-bottom-color:var(--line-strong);padding-top:8px;padding-bottom:8px}
+.gname{font-weight:600;display:flex;gap:8px;align-items:baseline;min-width:0}
+.gname .car{color:var(--muted);width:10px;flex:none}
+.nested .gname{font-weight:500}
+.gitem.open > .grow{background:color-mix(in oklab, var(--ink) 4%, transparent)}
+.gbody{display:flex;flex-direction:column;gap:12px;padding:12px 14px 16px;border-bottom:1px solid var(--line)}
+.nested .gbody{padding-left:0;padding-right:0}
+.gbody article.dp{background:var(--bg)}
+.nested .gitem:last-child > .grow{border-bottom:0}
+@media (max-width:760px){
+  .grow{grid-template-columns:minmax(0,1fr) 92px;gap:2px 10px}
+  .grow > span:nth-child(2),.grow > span:nth-child(3),.grow > span:nth-child(5),.grow > span:nth-child(6){display:none}
+  .grow.ghd > span:nth-child(4){font-size:0}.grow.ghd > span:nth-child(4)::after{content:"DPs";font-size:11px}
+  .gtable.nested{margin-left:8px}
+}
+#dps .dhead h2{font-family:var(--font-label);font-size:24px;font-weight:700;margin:0;line-height:1.2}
+#dps .sub{font-size:13.5px;color:var(--ink-2);margin:4px 0 0}
+.dnote{font-size:13.5px;color:var(--ink-2);margin:6px 0 0}
+.tw{overflow-x:auto;max-width:100%}
+#dps table{border-collapse:collapse;width:100%;font-size:13.5px;font-variant-numeric:tabular-nums}
+#dps th{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);text-align:right;padding:7px 10px;border-bottom:1px solid var(--line-strong);white-space:nowrap}
+#dps td{text-align:right;padding:7px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+#dps th:first-child,#dps td:first-child{text-align:left;padding-left:0;white-space:normal;min-width:150px}
+#dps tr.tot td{font-weight:700;border-top:1px solid var(--line-strong);border-bottom:0}
+table.sumt{background:var(--surface);border:1px solid var(--line);border-radius:6px}
+table.sumt th:first-child,table.sumt td:first-child{padding-left:14px}
+article.dp{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:16px 18px}
+.dtop{display:flex;justify-content:space-between;gap:16px;align-items:flex-start}
+.dtop h3{font-family:var(--font-label);font-size:19px;font-weight:700;margin:0;line-height:1.2}
+.dmeta{font-size:13px;color:var(--muted);margin:3px 0 0}
+.dmeta .imp{display:inline-flex;align-items:center;gap:6px;color:var(--ink-2)}
+.damt{font-family:var(--font-label);font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap;text-align:right}
+.damt small{display:block;font-family:var(--font-ui);font-size:12.5px;font-weight:500;color:var(--muted)}
+.dbody{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:16px 28px;margin-top:12px}
+@media (max-width:900px){.dbody{grid-template-columns:minmax(0,1fr)}}
+.dtext p{font-size:14.5px;line-height:1.55;color:var(--ink-2);margin:0;max-width:75ch}
+.dtext p.clamp{display:-webkit-box;-webkit-line-clamp:6;-webkit-box-orient:vertical;overflow:hidden}
+.dtext .dsi{margin-top:10px;font-size:13.5px}
+.dtext .dsi b{color:var(--ink)}
+.dsplit{font-size:13px;color:var(--muted);margin:8px 0 0}
+details.dpos{margin-top:10px;font-size:13.5px}
+details.dpos summary{cursor:pointer;color:var(--ink-2);font-weight:600}
+details.dpos td small{display:block;color:var(--muted);font-size:12px}
+@media (max-width:560px){.dtop{flex-direction:column;gap:6px}.damt{text-align:left}}
+
+</style>
+
+<div class="wrap">
+ <div class="tmview" id="tmview">
+  <header class="mast">
+    <div>
+      <p class="eyebrow">City of Portland · FY 2026-27 Adopted Budget and Fall Supplemental requests</p>
+      <h1 id="h1">Citywide budget</h1>
+    </div>
+    <div class="headline" aria-live="polite">
+      <div class="num" id="hnum">$8.55B</div>
+      <div class="cap" id="hcap">All funds · Total budget</div>
+    </div>
+  </header>
+
+  <p class="mocknote"><b>Mockup.</b> Adds the FY 2026-27 Fall Supplemental decision packages (DPs) to the <a href="../">adopted budget treemap</a>. Open any program to read its description and the requests that change it. Impact tags on requests are sample values.</p>
+
+  <div class="controls">
+   <div class="crow">
+    <div class="ctl">
+      <span class="ctl-label" id="lbl-dp">Decision packages</span>
+      <div class="seg" role="radiogroup" aria-labelledby="lbl-dp">
+        <input type="radio" name="dp" id="dp-base" value="base"><label for="dp-base">Base budget</label>
+        <input type="radio" name="dp" id="dp-all" value="all" checked><label for="dp-all">All DPs</label>
+        <input type="radio" name="dp" id="dp-only" value="dp"><label for="dp-only">DPs only</label>
+      </div>
+    </div>
+    <div class="ctl" id="ctl-si">
+      <span class="ctl-label" id="lbl-si">Service impact <span class="samp">sample tags</span></span>
+      <div class="seg" role="radiogroup" aria-labelledby="lbl-si">
+        <input type="radio" name="si" id="si-all" value="all" checked><label for="si-all">All requests</label>
+        <input type="radio" name="si" id="si-y" value="y"><label for="si-y"><span class="dot" aria-hidden="true"></span> Service impact</label>
+        <input type="radio" name="si" id="si-n" value="n"><label for="si-n"><span class="ring" aria-hidden="true"></span> No service impact</label>
+      </div>
+    </div>
+   </div>
+   <div class="crow">
+    <div class="ctl">
+      <span class="ctl-label" id="lbl-fund">Funds</span>
+      <div class="seg" role="radiogroup" aria-labelledby="lbl-fund">
+        <input type="radio" name="fund" id="fund-all" value="all" checked><label for="fund-all">All funds</label>
+        <input type="radio" name="fund" id="fund-gf" value="gf"><label for="fund-gf">General Fund</label>
+      </div>
+    </div>
+    <div class="ctl">
+      <span class="ctl-label" id="lbl-measure">Budget measure</span>
+      <div class="seg" role="radiogroup" aria-labelledby="lbl-measure">
+        <input type="radio" name="measure" id="measure-total" value="total" checked><label for="measure-total">Total budget</label>
+        <input type="radio" name="measure" id="measure-op" value="op"><label for="measure-op">Operating</label>
+        <input type="radio" name="measure" id="measure-cap" value="cap"><label for="measure-cap">Capital</label>
+      </div>
+    </div>
+    <div class="ctl" id="ctl-by" aria-disabled="true">
+      <span class="ctl-label" id="lbl-by">Bureau breakdown</span>
+      <div class="seg" role="radiogroup" aria-labelledby="lbl-by">
+        <input type="radio" name="by" id="by-program" value="program" checked disabled><label for="by-program">By program</label>
+        <input type="radio" name="by" id="by-fund" value="fund" disabled><label for="by-fund">By fund</label>
+      </div>
+    </div>
+   </div>
+  </div>
+
+  <nav class="crumbs" id="crumbs" aria-label="Treemap level"></nav>
+
+  <section id="narr" aria-label="Program description" hidden></section>
+
+  <div class="main">
+    <div class="chart-col">
+      <div id="tm" role="group" aria-label="Budget treemap"></div>
+      <div class="hint" id="hint"></div>
+      <div class="notes" id="notes"></div>
+    </div>
+    <aside class="panel" id="panel" aria-live="polite"></aside>
+  </div>
+
+  <section id="dps" aria-label="Decision packages" hidden></section>
+
+  </div>
+
+  <section id="dppage" aria-live="polite" hidden></section>
+
+  <footer class="src">
+    <p><b>Decision packages.</b> Fall TAO D7 decision package export (__LINES__ line items, __NDP__ packages), requested expense requirements of __TOTEXP__. The financial export leaves out personnel costs generated by positions, so the __POSCOST__ in position costs from the personnel export are added to Personnel and assigned to sub-programs by each position's functional area. <b>Base budget</b> is the adopted budget alone, <b>All DPs</b> adds every request, and <b>DPs only</b> shows just the requested change. <b>Service impact</b> limits the requests to those tagged with or without a service impact (sample tags in this mockup). Program descriptions are from the FY 2026-27 Adopted Budget book.</p>
+    <p><b>Source.</b> City of Portland Ad Hoc Reporting Tool export, FY 2026-27 Adopted Budget (expense requirements). All-funds total ties to the Adopted Budget's Table 1 ($8,546,060,062); the General Fund total ties to Figure 10 ($1,186,002,037).</p>
+    <p><b>Total budget</b> is the legal budget under Oregon Local Budget Law: bureau expenses plus fund-level requirements (contingency, debt service, fund transfers, reserves and ending fund balance). It counts internal transactions between funds more than once. <b>Capital</b> is spending on Capital Improvement Plan projects ($1.19B), and <b>Operating</b> is everything else ($7.35B), matching the Adopted Budget's Table 10.</p>
+    <p><b>General Fund</b> means Fund 100 only. Prosper Portland shows only its City-budgeted amount. Values are in nominal dollars; tiles under about 0.3% of the view may be too small to label, so hover or use the list to read them.</p>
+  </footer>
+</div>
+<div id="tip" hidden></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script>
+const D = __DATA__;
+const GF = D.fd.findIndex(f => f.startsWith('100 '));
+const st = {fund:'all', measure:'total', by:'program', dp:'all', si:'all', panel:false, openG:new Set(), allG:new Set(), sa:null, bu:null, pg:null, sel:null, full:false, allDP:false};
+const $ = id => document.getElementById(id);
+const tm = $('tm'), tip = $('tip');
+const isDP = r => r.length > 7;
+
+function money(v, exact, signed){
+  const sg = v < 0 ? '−' : (signed && v > 0 ? '+' : '');
+  if (exact) return sg + '$' + Math.abs(Math.round(v)).toLocaleString('en-US');
+  const a = Math.abs(v);
+  if (a >= 1e9) return sg + '$' + (a/1e9).toFixed(2) + 'B';
+  if (a >= 1e8) return sg + '$' + (a/1e6).toFixed(0) + 'M';
+  if (a >= 1e6) return sg + '$' + (a/1e6).toFixed(1) + 'M';
+  if (a >= 1e3) return sg + '$' + (a/1e3).toFixed(0) + 'K';
+  return sg + '$' + a.toFixed(0);
+}
+const sm = v => money(v, false, st.dp === 'dp');           // signed only when showing DPs alone
+const pct = (a,b) => b ? (Math.abs(a/b*100) >= 10 ? (a/b*100).toFixed(0) : (a/b*100).toFixed(1)) + '%' : '—';
+const chg = (c, base) => !c ? '' : !base ? 'new' : (c > 0 ? '+' : '−') + Math.abs(c/base*100).toFixed(Math.abs(c/base*100) < 10 ? 1 : 0) + '%';
+const fundName = i => D.fd[i].replace(/^(\d+) - /, '');
+const fundNum = i => D.fd[i].split(' ')[0];
+const color = sa => `var(--c${sa})`;
+const fteS = v => { const r = Math.round(v*100)/100; return (r > 0 ? '+' : r < 0 ? '−' : '') + Math.abs(r).toLocaleString('en-US',{maximumFractionDigits:2}); };
+function esc(s){ return String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+/* ---------- rows: base budget, decision packages, or both ---------- */
+const keepRow = r => (st.fund === 'all' || r[2] === GF) && (st.measure === 'total' || r[4] === (st.measure === 'cap' ? 1 : 0));
+const baseRows = () => D.rows.filter(keepRow);
+const siOK = r => st.si === 'all' || D.dp[r[7]].si === (st.si === 'y');
+const dpRows = () => D.dr.filter(r => keepRow(r) && siOK(r));
+function rows(){ return st.dp === 'base' ? baseRows() : st.dp === 'dp' ? dpRows() : baseRows().concat(dpRows()); }
+
+// sums keep the DP share separately so tiles and lists can show the change
+function sumBy(rs, keyFn){
+  const m = new Map();
+  for (const r of rs){ const k = keyFn(r); const o = m.get(k) || {v:0, c:0}; o.v += r[6]; if (isDP(r)) o.c += r[6]; m.set(k, o); }
+  return m;
+}
+const total = rs => rs.reduce((s,r) => s + r[6], 0);
+const totalC = rs => rs.reduce((s,r) => s + (isDP(r) ? r[6] : 0), 0);
+const size = v => st.dp === 'dp' ? Math.abs(v) : v;
+const leafKey = V => V.level === 'program' ? (r => r[5]) : st.by === 'program' ? (r => r[1]) : (r => r[2]);
+
+/* ---------- build the current view ---------- */
+function view(){
+  const all = rows();
+  const cityTotal = total(all), cityC = totalC(all);
+  const mk = (m, f) => [...m].map(([k,o]) => ({k, v:o.v, c:o.c, ...f(k)}));
+  if (st.pg !== null){
+    const bscope = all.filter(r => r[0] === st.bu);
+    const scope = bscope.filter(r => r[1] === st.pg);
+    const items = mk(sumBy(scope, r => r[5]), k => ({id:'u'+k, name:D.sp[k], sa:D.buSA[st.bu], leaf:true}));
+    return {level:'program', all, scope, cityTotal, cityC, bureauTotal: total(bscope), nodeTotal: total(scope), nodeC: totalC(scope), items};
+  }
+  if (st.bu !== null){
+    const scope = all.filter(r => r[0] === st.bu);
+    const key = st.by === 'program' ? (r => r[1]) : (r => r[2]);
+    const items = mk(sumBy(scope, key), k => ({id:(st.by==='program'?'p':'f')+k,
+      name: st.by==='program' ? D.pg[k] : fundName(k), tag: st.by==='fund' ? 'Fund ' + fundNum(k) : '', sa: D.buSA[st.bu], leaf:true}));
+    return {level:'bureau', all, scope, cityTotal, cityC, nodeTotal: total(scope), nodeC: totalC(scope), items};
+  }
+  if (st.sa !== null){
+    const scope = all.filter(r => D.buSA[r[0]] === st.sa);
+    const items = mk(sumBy(scope, r => r[0]), k => ({id:'b'+k, name:D.bu[k], sa:st.sa, kind:'bu'}));
+    return {level:'sa', all, scope, cityTotal, cityC, nodeTotal: total(scope), nodeC: totalC(scope), items};
+  }
+  const groups = D.sa.map((name, i) => ({id:'s'+i, k:i, name, sa:i, kind:'sa', children:[]}));
+  for (const [k,o] of sumBy(all, r => r[0])) groups[D.buSA[k]].children.push({id:'b'+k, k, v:o.v, c:o.c, name:D.bu[k], sa:D.buSA[k], kind:'bu'});
+  groups.forEach(g => { g.v = g.children.reduce((s,c) => s + c.v, 0); g.c = g.children.reduce((s,c) => s + c.c, 0); });
+  return {level:'city', all, scope: all, cityTotal, cityC, nodeTotal: cityTotal, nodeC: cityC, groups: groups.filter(g => g.children.some(c => size(c.v) > 0))};
+}
+
+/* ---------- render ---------- */
+let lastLevelKey = '';
+function render(){
+  const V = view();
+  const levelKey = V.level + '|' + st.sa + '|' + st.bu + '|' + st.pg + '|' + st.by + '|' + st.dp + '|' + st.si;
+  const sameLevel = levelKey === lastLevelKey; lastLevelKey = levelKey;
+  if (!sameLevel) tm.innerHTML = '';
+
+  const scopeLabel = st.fund === 'all' ? 'All funds' : 'General Fund';
+  const measLabel = {total:'Total budget', op:'Operating budget', cap:'Capital budget'}[st.measure];
+  const siLabel = st.si === 'y' ? ' with service impact' : st.si === 'n' ? ' with no service impact' : '';
+  const dpLabel = st.dp === 'base' ? 'Adopted, before decision packages' : st.dp === 'dp' ? `Decision packages${siLabel} only, net change`
+    : `Includes ${money(V.nodeC, false, true)} in decision packages${siLabel}`;
+  const where = st.pg !== null ? D.pg[st.pg] : st.bu !== null ? D.bu[st.bu] : st.sa !== null ? D.sa[st.sa] : (st.dp === 'dp' ? 'Citywide decision packages' : 'Citywide budget');
+  $('h1').textContent = where;
+  $('hnum').textContent = sm(V.nodeTotal);
+  $('hnum').title = money(V.nodeTotal, true, st.dp === 'dp');
+  $('hcap').textContent = `${scopeLabel} · ${measLabel} · ${dpLabel}` + (V.level !== 'city' && st.dp !== 'dp' ? ` · ${pct(V.nodeTotal, V.cityTotal)} of City ${st.fund === 'gf' ? 'General Fund' : 'total'}` : '');
+
+  $('ctl-si').setAttribute('aria-disabled', st.dp === 'base' ? 'true' : 'false');
+  document.querySelectorAll('input[name="si"]').forEach(i => i.disabled = st.dp === 'base');
+  const byOn = V.level === 'bureau';
+  $('ctl-by').setAttribute('aria-disabled', byOn ? 'false' : 'true');
+  $('by-program').disabled = $('by-fund').disabled = !byOn;
+
+  renderCrumbs(V);
+
+  let items, negs = [];
+  if (V.level === 'city'){
+    if (st.dp !== 'dp') V.groups.forEach(g => { negs.push(...g.children.filter(c => c.v < 0)); });
+    V.groups.forEach(g => g.children = g.children.filter(c => size(c.v) > 0));
+  } else {
+    if (st.dp !== 'dp') negs = V.items.filter(d => d.v < 0);
+    items = V.items.filter(d => size(d.v) > 0);
+  }
+
+  const W = tm.clientWidth, H = tm.clientHeight;
+  const hasData = V.level === 'city' ? V.groups.length : items.length;
+  tm.querySelectorAll('.empty').forEach(n => n.remove());
+  if (!hasData){
+    tm.innerHTML = '';
+    const e = document.createElement('div'); e.className = 'empty';
+    const name = st.pg !== null ? D.pg[st.pg] : st.bu !== null ? D.bu[st.bu] : st.sa !== null ? D.sa[st.sa] : 'The City';
+    e.innerHTML = st.dp === 'dp' ? `<div><b>${esc(name)}</b> has no decision packages${st.fund==='gf' ? ' in the General Fund' : ''} in this view.</div>`
+      : `<div><b>${esc(name)}</b> has no ${esc(measLabel.toLowerCase())}${st.fund==='gf' ? ' in the General Fund' : ''}.</div>`;
+    const b = document.createElement('button'); b.textContent = st.dp === 'dp' ? 'Show the budget with all DPs' : 'Show all funds, total budget';
+    b.onclick = () => { if (st.dp === 'dp'){ $('dp-all').checked = true; st.dp = 'all'; } else { $('fund-all').checked = true; $('measure-total').checked = true; st.fund = 'all'; st.measure = 'total'; } render(); };
+    e.appendChild(b); tm.appendChild(e); lastLevelKey = '';
+  } else {
+    let root;
+    if (V.level === 'city'){
+      root = d3.hierarchy({children: V.groups}).sum(d => d.children ? 0 : size(d.v)).sort((a,b) => b.value - a.value);
+      d3.treemap().size([W,H]).paddingOuter(d => d.depth === 1 ? 2 : 3).paddingTop(d => d.depth === 1 ? (d.y1 - d.y0 > 60 && d.x1 - d.x0 > 70 ? 22 : 2) : 3)
+        .paddingInner(d => d.depth === 0 ? 4 : 2).round(true).tile(d3.treemapSquarify.ratio(1.3))(root);
+    } else {
+      root = d3.hierarchy({children: items}).sum(d => d.children ? 0 : size(d.v)).sort((a,b) => b.value - a.value);
+      d3.treemap().size([W,H]).padding(2).round(true).tile(d3.treemapSquarify.ratio(1.3))(root);
+    }
+    drawNodes(root, V);
+  }
+
+  const dpHint = st.dp === 'dp' ? ' Tile size is the size of the change; striped tiles are net decreases.' : st.dp === 'all' ? ' Percentages on tiles are the change from decision packages.' : '';
+  $('hint').textContent = (V.level === 'city' ? 'Tiles are bureaus, grouped by service area. Select a bureau to open it, or a service area heading to see only that area.'
+    : V.level === 'sa' ? 'Select a bureau to break it down by program or fund.'
+    : V.level === 'program' ? (items && items.length === 1 ? 'This program has a single sub-program. Select it to see its funding detail.' : 'Tiles are sub-programs. Select one to see its description and funding detail.')
+    : st.by === 'program' ? 'Select a program to see its description, sub-programs and decision packages.'
+    : 'Select a fund to see which programs it pays for.') + dpHint;
+  $('notes').textContent = negs.length ? 'Not drawn because the amount nets below zero (offsetting credits): ' +
+    negs.map(n => `${n.name} (${money(n.v)})`).join('; ') + '. Totals above include it.' : '';
+
+  renderPanel(V);
+  renderNarrative(V);
+  renderDPs(V);
+}
+
+function drawNodes(root, V){
+  const keep = new Set();
+  const place = (el, n) => { el.style.left = n.x0+'px'; el.style.top = n.y0+'px'; el.style.width = Math.max(0,n.x1-n.x0)+'px'; el.style.height = Math.max(0,n.y1-n.y0)+'px'; };
+  if (V.level === 'city'){
+    for (const g of root.children){
+      const gid = 'g-' + g.data.id; keep.add(gid);
+      let ge = tm.querySelector(`[data-key="${gid}"]`);
+      if (!ge){
+        ge = document.createElement('div'); ge.className = 'group'; ge.dataset.key = gid;
+        ge.style.setProperty('--c', color(g.data.sa));
+        const h = document.createElement('button'); h.className = 'ghead';
+        h.onclick = () => go(g.data.k, null);
+        h.addEventListener('pointermove', ev => showTip(ev, g.data, view(), 'sa'));
+        h.addEventListener('pointerleave', hideTip);
+        ge.appendChild(h); tm.appendChild(ge);
+      }
+      place(ge, g);
+      const h = ge.querySelector('.ghead');
+      h.hidden = !(g.y1 - g.y0 > 60 && g.x1 - g.x0 > 70);
+      h.innerHTML = `${esc(g.data.name)}<span class="gv">${sm(g.data.v)}${st.dp === 'all' && g.data.c ? ' · ' + chg(g.data.c, g.data.v - g.data.c) : ''}</span>`;
+      h.setAttribute('aria-label', `${g.data.name} service area, ${sm(g.data.v)}. Open service area.`);
+    }
+  }
+  for (const n of root.leaves()){
+    const d = n.data, key = 't-' + d.id; keep.add(key);
+    let el = tm.querySelector(`[data-key="${key}"]`);
+    if (!el){
+      el = document.createElement('button'); el.className = 'tile'; el.dataset.key = key;
+      el.innerHTML = '<span class="nm"></span><span class="vl"></span>';
+      const kind = V.level === 'program' ? 'leaf' : V.level === 'bureau' ? (st.by === 'program' ? 'pg' : 'leaf') : 'bu';
+      el.addEventListener('pointermove', ev => showTip(ev, d, view(), kind));
+      el.addEventListener('pointerleave', hideTip);
+      el.addEventListener('click', () => {
+        hideTip();
+        if (kind === 'leaf'){ st.sel = st.sel === d.id ? null : d.id; st.full = false; render(); }
+        else if (kind === 'pg') goPg(d.k);
+        else go(d.sa, d.k);
+      });
+      tm.appendChild(el);
+    }
+    el.style.setProperty('--c', color(d.sa));
+    el.classList.toggle('neg', st.dp === 'dp' && d.v < 0);
+    place(el, n);
+    const w = n.x1 - n.x0, h = n.y1 - n.y0;
+    const longest = Math.max(...d.name.split(/\s+/).map(s => s.length));
+    const fs = Math.max(11, Math.min(20, Math.sqrt(w*h) / 11, (w - 14) / (longest * 0.55)));
+    const nm = el.querySelector('.nm'), vl = el.querySelector('.vl');
+    nm.style.fontSize = fs + 'px'; nm.style.webkitLineClamp = Math.max(1, Math.floor((h - 14 - fs) / (fs*1.12)));
+    vl.style.fontSize = Math.max(11, fs*0.82) + 'px';
+    const showName = w > 46 && h > 22, showVal = w > 54 && h > 22 + fs*1.6;
+    nm.textContent = showName ? d.name : ''; nm.hidden = !showName;
+    const c = st.dp === 'all' && d.c ? ' · ' + chg(d.c, d.v - d.c) : '';
+    vl.textContent = showVal ? sm(d.v) + c + (d.tag ? ' · ' + d.tag : '') : ''; vl.hidden = !showVal;
+    el.style.padding = (w < 40 || h < 26) ? '2px 4px' : '';
+    el.classList.toggle('sel', st.sel === d.id);
+    const isLeaf = V.level === 'program' || (V.level === 'bureau' && st.by === 'fund');
+    el.setAttribute('aria-label', `${d.name}, ${sm(d.v)}${c ? ', decision packages ' + money(d.c, false, true) : ''}. ` +
+      (isLeaf ? 'Show details.' : V.level === 'bureau' ? 'Open program.' : 'Open bureau.'));
+    if (isLeaf) el.setAttribute('aria-pressed', String(st.sel === d.id)); else el.removeAttribute('aria-pressed');
+  }
+  tm.querySelectorAll('[data-key]').forEach(el => { if (!keep.has(el.dataset.key)) el.remove(); });
+  tm.querySelectorAll('.tile').forEach(t => tm.appendChild(t));
+}
+
+function renderCrumbs(V){
+  const c = $('crumbs'); c.innerHTML = '';
+  const add = (label, fn) => {
+    if (fn){ const b = document.createElement('button'); b.textContent = label; b.onclick = fn; c.appendChild(b); }
+    else { const s = document.createElement('span'); s.className = 'here'; s.textContent = label; s.setAttribute('aria-current','page'); c.appendChild(s); }
+  };
+  const sep = () => { const s = document.createElement('span'); s.className = 'sep'; s.textContent = '›'; s.setAttribute('aria-hidden','true'); c.appendChild(s); };
+  add('City of Portland', V.level === 'city' ? null : () => go(null, null));
+  if (st.sa !== null){ sep(); add(D.sa[st.sa], V.level === 'sa' ? null : () => go(st.sa, null)); }
+  if (st.bu !== null){ sep(); add(D.bu[st.bu], V.level === 'bureau' ? null : () => go(st.sa, st.bu)); }
+  if (st.pg !== null){ sep(); add(D.pg[st.pg], null); }
+  const l = document.createElement('span'); l.className = 'lvl';
+  l.textContent = {city:'City level', sa:'Service area level', bureau:'Bureau level', program:'Program level'}[V.level];
+  c.appendChild(l);
+}
+
+/* ---------- side panel ---------- */
+function ledgerRow(d, base, onClick, selected){
+  const li = document.createElement('li');
+  const b = document.createElement(onClick ? 'button' : 'div');
+  b.className = 'row' + (onClick ? '' : ' static') + (selected ? ' sel' : '') + (st.dp === 'dp' && d.v < 0 ? ' neg' : '');
+  b.style.setProperty('--c', color(d.sa));
+  const w = base > 0 ? Math.max(0, Math.min(100, size(d.v) / base * 100)) : 0;
+  const c = st.dp === 'all' && d.c ? `<span class="dpc ${d.c < 0 ? 'down' : 'up'}">DPs ${money(d.c, false, true)}</span>` : '';
+  b.innerHTML = `<span class="sw"></span><span class="n">${esc(d.name)}${d.tag ? ` <span class="pct">${esc(d.tag)}</span>` : ''}${c}</span>
+    <span class="v">${sm(d.v)}<span class="pct">${pct(size(d.v), base)}</span></span><span class="bar"><i style="width:${w}%"></i></span>`;
+  if (onClick){ b.onclick = onClick; if (selected !== undefined) b.setAttribute('aria-pressed', String(!!selected)); }
+  li.appendChild(b); return li;
+}
+const absBase = list => list.reduce((s,d) => s + Math.abs(d.v), 0);
+const baseFor = (list, net) => st.dp === 'dp' ? absBase(list) : net;
+
+function renderPanel(V){
+  const p = $('panel'); p.innerHTML = ''; p.scrollTop = 0;
+  _renderPanel(V, p);
+  // expand control, only when the content is taller than the treemap
+  p.classList.toggle('open', st.panel);
+  requestAnimationFrame(() => {
+    const over = st.panel || p.scrollHeight > p.clientHeight + 4;
+    if (!over) return;
+    const bar = document.createElement('div'); bar.className = 'pexp';
+    const b = document.createElement('button'); b.type = 'button';
+    b.textContent = st.panel ? 'Collapse panel' : 'Expand panel';
+    b.setAttribute('aria-expanded', String(st.panel));
+    b.onclick = () => { st.panel = !st.panel; renderPanel(view()); if (!st.panel) $('panel').scrollIntoView({block:'nearest'}); };
+    bar.appendChild(b); p.appendChild(bar);
+  });
+}
+function _renderPanel(V, p){
+  const head = document.createElement('div');
+  const sec = title => { const s = document.createElement('section'); s.innerHTML = `<h3>${esc(title)}</h3>`; return s; };
+  const ul = () => { const u = document.createElement('ul'); u.className = 'ledger'; return u; };
+  const ranked = (list) => list.slice().sort((a,b) => size(b.v) - size(a.v));
+  const what = st.dp === 'dp' ? 'net change from decision packages' : '';
+
+  if (V.level === 'city'){
+    head.innerHTML = `<h2>Service areas</h2><p class="sub">${sm(V.nodeTotal)} ${what || `across ${V.groups.length} service areas`}</p>`;
+    p.appendChild(head);
+    const s = sec(st.dp === 'dp' ? 'Ranked by size of change' : 'Ranked by budget'), u = ul();
+    ranked(V.groups).forEach(g => u.appendChild(ledgerRow(g, baseFor(V.groups, V.nodeTotal), () => go(g.k, null))));
+    s.appendChild(u); p.appendChild(s);
+    p.appendChild(catSection(V.scope, null, () => true));
+    return;
+  }
+  if (V.level === 'sa'){
+    head.innerHTML = `<h2>Bureaus in ${esc(D.sa[st.sa])}</h2><p class="sub">${sm(V.nodeTotal)} ${what || '· ' + pct(V.nodeTotal, V.cityTotal) + ' of the City total'}</p>`;
+    p.appendChild(head);
+    const s = sec(st.dp === 'dp' ? 'Ranked by size of change' : 'Ranked by budget'), u = ul(); u.classList.add('scroll');
+    ranked(V.items).forEach(d => u.appendChild(ledgerRow(d, baseFor(V.items, V.nodeTotal), () => go(d.sa, d.k))));
+    s.appendChild(u); p.appendChild(s);
+    p.appendChild(catSection(V.scope, st.sa, r => D.buSA[r[0]] === st.sa));
+    return;
+  }
+  const isProg = V.level === 'program';
+  const drill = !isProg && st.by === 'program';
+  const sel = !drill && st.sel && V.items.find(d => d.id === st.sel);
+  if (st.sel && !sel) st.sel = null;
+  const sa = D.buSA[st.bu];
+  const unit = isProg ? 'sub-program' : st.by;
+  head.innerHTML = isProg
+    ? `<p class="sub" style="margin:0">${esc(D.bu[st.bu])}</p><h2>${esc(D.pg[st.pg])}</h2><p class="sub">${sm(V.nodeTotal)} ${what || '· ' + pct(V.nodeTotal, V.bureauTotal) + ' of bureau'} · ${V.items.length} sub-program${V.items.length === 1 ? '' : 's'}</p>`
+    : `<h2>${esc(D.bu[st.bu])}</h2><p class="sub">${sm(V.nodeTotal)} ${what || '· ' + pct(V.nodeTotal, V.cityTotal) + ' of the City total'} · ${V.items.length} ${unit}${V.items.length === 1 ? '' : 's'}</p>`;
+  p.appendChild(head);
+  const s = sec(isProg ? 'Sub-programs' : st.by === 'program' ? 'Programs' : 'Funds'), u = ul(); u.classList.add('scroll');
+  const base = baseFor(V.items, V.nodeTotal);
+  ranked(V.items).forEach(d => u.appendChild(drill
+    ? ledgerRow(d, base, () => goPg(d.k))
+    : ledgerRow(d, base, () => { st.sel = st.sel === d.id ? null : d.id; st.full = false; render(); }, st.sel === d.id)));
+  s.appendChild(u); p.appendChild(s);
+
+  const crossSec = (rs) => {
+    const byFund = isProg || st.by === 'program';
+    const list = [...sumBy(rs, byFund ? (r => r[2]) : (r => r[1]))].filter(([,o]) => Math.round(o.v) !== 0)
+      .map(([k,o]) => ({name: byFund ? fundName(k) : D.pg[k], tag: byFund ? 'Fund ' + fundNum(k) : '', v:o.v, c:o.c, sa}));
+    const cs = sec(byFund ? 'Funded by' : 'Programs in this fund'), cu = ul();
+    const b = baseFor(list, total(rs));
+    ranked(list).forEach(d => cu.appendChild(ledgerRow(d, b)));
+    cs.appendChild(cu); return cs;
+  };
+  if (sel){
+    const rs = V.scope.filter(r => leafKey(V)(r) === sel.k);
+    const box = document.createElement('section'); box.className = 'selbox';
+    box.innerHTML = `<div><h3>Selected ${unit}</h3><h2 style="font-size:17px">${esc(sel.name)}</h2><p class="sub">${money(sel.v, true, st.dp === 'dp')}${st.dp !== 'dp' ? ' · ' + pct(sel.v, V.nodeTotal) + ' of ' + (isProg ? 'program' : 'bureau') : ''}</p></div>`;
+    box.appendChild(crossSec(rs));
+    box.appendChild(catSection(rs, sa, r => scopePred()(r) && leafKey(V)(r) === sel.k));
+    const clr = document.createElement('button'); clr.className = 'btn'; clr.textContent = 'Clear selection'; clr.style.alignSelf = 'flex-start';
+    clr.onclick = () => { st.sel = null; render(); };
+    box.appendChild(clr); p.appendChild(box);
+  } else {
+    if (isProg) p.appendChild(crossSec(V.scope));
+    p.appendChild(catSection(V.scope, sa, scopePred()));
+  }
+}
+
+const scopePred = () => st.pg !== null ? (r => r[0] === st.bu && r[1] === st.pg) : (r => r[0] === st.bu);
+function catSection(rs, sa, pred){
+  const m = sumBy(rs, r => r[3]);
+  const list = D.mo.map((mo, i) => ({k:i, name: mo[1], ...(m.get(i) || {v:0, c:0}), sa: sa === null ? 'x' : sa})).filter(d => Math.round(d.v) !== 0);
+  const s = document.createElement('section'); s.className = 'cats';
+  s.innerHTML = '<h3>By spending category</h3>';
+  const u = document.createElement('ul'); u.className = 'ledger';
+  const b = baseFor(list, total(rs));
+  // commitment items for the same scope and toggles: [mo, ci, amount, from a DP]
+  const ci = pred ? [
+    ...(st.dp !== 'dp' ? D.bci.filter(r => keepRow(r) && pred(r)).map(r => [r[3], r[7], r[6], 0]) : []),
+    ...(st.dp !== 'base' ? D.dr.filter(r => keepRow(r) && siOK(r) && pred(r)).map(r => [r[3], r[8], r[6], 1]) : [])] : [];
+  list.forEach(d => {
+    const li = ledgerRow(d, b);
+    const m2 = new Map(); ci.filter(x => x[0] === d.k).forEach(([,c,v,isd]) => { const o = m2.get(c) || {v:0, c:0}; o.v += v; if (isd) o.c += v; m2.set(c, o); });
+    const items = [...m2].filter(([,o]) => Math.round(o.v) || Math.round(o.c)).sort((x,y) => Math.abs(y[1].v) - Math.abs(x[1].v));
+    if (items.length){
+      const uid = 'c' + (++CXN), row = li.querySelector('.row'), n = row.querySelector('.n');
+      n.innerHTML = cxBtn(uid, n.innerHTML, items.length);
+      const sub = document.createElement('ul'); sub.className = 'cil'; sub.dataset.cp = uid; sub.hidden = true;
+      sub.innerHTML = items.map(([c, o]) => `<li><span class="cn">${esc(D.ci[c])}${st.dp === 'all' && o.c ? `<span class="dpc ${o.c < 0 ? 'down' : 'up'}">DPs ${money(o.c, false, true)}</span>` : ''}</span><span class="cv">${sm(o.v)}</span></li>`).join('');
+      li.appendChild(sub);
+    }
+    u.appendChild(li);
+  });
+  if (sa === null) u.querySelectorAll('.row').forEach(r => r.style.setProperty('--c', 'var(--ink-2)'));
+  s.appendChild(u); return s;
+}
+
+/* ---------- program narrative (adopted budget book) ---------- */
+function firstSentences(t, n){
+  const flat = t.replace(/\s*\n+\s*/g, ' ').trim();
+  const parts = flat.split(/(?<=[.!?])\s+(?=[A-Z(“"])/);
+  return parts.slice(0, n).join(' ');
+}
+function programSubs(){
+  // every sub-program in this program, from the base budget and the requests, regardless of filters
+  const set = new Set();
+  D.rows.concat(D.dr).forEach(r => { if (r[0] === st.bu && r[1] === st.pg) set.add(r[5]); });
+  return [...set];
+}
+function renderNarrative(V){
+  const box = $('narr');
+  if (V.level !== 'program'){ box.hidden = true; box.innerHTML = ''; return; }
+  const subs = programSubs();
+  const selSp = st.sel ? +st.sel.slice(1) : null;
+  const one = selSp !== null ? [selSp] : subs.length === 1 ? subs : null;
+  const D_ = k => D.desc[`${st.bu}|${k}`];
+  let h = '';
+  if (one){
+    const k = one[0], x = D_(k);
+    h = `<h2 class="nh">${esc(D.sp[k])}</h2>` + (x
+      ? `<div class="ntext${st.full ? '' : ' clamp'}">${esc(x.d)}</div>${x.s ? `<p class="nserv${st.full ? '' : ' clamp1'}"><b>Services.</b> ${esc(x.s)}</p>` : ''}
+         <button type="button" class="nmore" id="nmore">${st.full ? 'Show less' : 'Read the full description'}</button>`
+      : `<p class="ntext none">The adopted budget book has no description for this program offer.</p>`)
+      + (selSp !== null && subs.length > 1 ? `<button type="button" class="nmore" id="nall">Back to all of ${esc(D.pg[st.pg])}</button>` : '');
+  } else {
+    const ranked = subs.map(k => ({k, v: Math.abs(V.items.find(d => d.k === k)?.v || 0)})).sort((a,b) => b.v - a.v);
+    const LIM = 4, shown = st.full ? ranked : ranked.slice(0, LIM);
+    h = `<h2 class="nh">About ${esc(D.pg[st.pg])}</h2><p class="nlead">${esc(D.pg[st.pg])} is made up of ${subs.length} sub-programs. Select one here or in the treemap for its full description.</p>
+      <div class="nlist">${shown.map(({k}) => { const x = D_(k);
+        return `<p><button type="button" class="nlink" data-sp="${k}">${esc(D.sp[k])}</button>${x ? ' ' + esc(st.full ? x.d : firstSentences(x.d, 1)) : ' <span class="none">No description in the adopted budget book.</span>'}</p>`; }).join('')}</div>
+      <button type="button" class="nmore" id="nmore">${st.full ? 'Show shorter descriptions' : ranked.length > LIM ? `Show all ${ranked.length} sub-programs with full descriptions` : 'Read the full descriptions'}</button>`;
+  }
+  box.innerHTML = h; box.hidden = false;
+  const m = $('nmore'); if (m) m.onclick = () => { st.full = !st.full; renderNarrative(view()); };
+  const a = $('nall'); if (a) a.onclick = () => { st.sel = null; st.full = false; render(); };
+  box.querySelectorAll('.nlink').forEach(b => b.onclick = () => { st.sel = 'u' + b.dataset.sp; st.full = false; render(); });
+}
+
+/* ---------- commitment items ---------- */
+// rows: base at commitment item level is D.bci [bu,pg,fd,mo,cap,sp,amount,ci]; DP rows carry ci at r[8]
+let CXN = 0;
+const cxBtn = (uid, label, n) => n ? `<button type="button" class="cx" data-cx="${uid}" aria-expanded="false" title="Show ${n} commitment item${n === 1 ? '' : 's'}"><span class="car" aria-hidden="true">▸</span>${label}</button>` : `<span class="cxs">${label}</span>`;
+function groupCI(rows, ciAt){ const m = new Map(); rows.forEach(r => m.set(r[ciAt], (m.get(r[ciAt]) || 0) + r[6])); return m; }
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-cx]'); if (!b) return;
+  const open = b.getAttribute('aria-expanded') !== 'true';
+  b.setAttribute('aria-expanded', String(open));
+  b.querySelector('.car').textContent = open ? '▾' : '▸';
+  document.querySelectorAll(`[data-cp="${b.dataset.cx}"]`).forEach(r => r.hidden = !open);
+});
+
+/* ---------- decision packages at every level ---------- */
+const MOI = D.mo.map((m, i) => i);
+const sumv = rs => rs.reduce((s,r) => s + r[6], 0);
+const nDP = rs => new Set(rs.filter(r => r[6]).map(r => r[7])).size;
+const cls = v => v > 0 ? 'up' : v < 0 ? 'down' : 'z';
+const filtTxt = () => (st.si === 'y' ? 'requests with service impact, ' : st.si === 'n' ? 'requests with no service impact, ' : '') +
+  (st.fund === 'gf' ? 'General Fund' : 'all funds') + (st.measure === 'total' ? '' : st.measure === 'cap' ? ', capital only' : ', operating only');
+const KIND = {
+  sa: {key: r => D.buSA[r[0]], name: k => D.sa[k], next: 'bu', label: 'Service area'},
+  bu: {key: r => r[0], name: k => D.bu[k], next: 'cards', label: 'Bureau', cardBase: 'Bureau'},
+  pg: {key: r => r[1], name: k => D.pg[k], next: 'cards', label: 'Program', cardBase: 'Program'},
+};
+
+function renderDPs(V){
+  const box = $('dps');
+  const selSp = V.level === 'program' && st.sel ? +st.sel.slice(1) : null;
+  const where = V.level === 'program' ? (selSp !== null ? D.sp[selSp] : D.pg[st.pg]) : V.level === 'bureau' ? D.bu[st.bu] : V.level === 'sa' ? D.sa[st.sa] : 'the City';
+  box.hidden = false;
+  if (st.dp === 'base'){
+    box.innerHTML = `<div class="dhead"><h2>Decision packages</h2><p class="sub">Not shown while <b>Base budget</b> is selected. <button type="button" class="nmore" id="dpOn" style="margin:0">Include all DPs</button></p></div>`;
+    $('dpOn').onclick = () => { $('dp-all').checked = true; st.dp = 'all'; render(); };
+    return;
+  }
+  const inScope = r => (st.sa === null || D.buSA[r[0]] === st.sa) && (st.bu === null || r[0] === st.bu) && (st.pg === null || r[1] === st.pg) && (selSp === null || r[5] === selSp);
+  const req = D.dr.filter(r => keepRow(r) && siOK(r) && inScope(r));
+  const base = D.bci.filter(r => keepRow(r) && inScope(r));
+  const n = nDP(req), tc = sumv(req);
+  let h = `<div class="dhead"><h2>Decision packages ${V.level === 'city' ? 'citywide' : 'in ' + esc(where)}</h2>
+    <p class="sub">${n} request${n === 1 ? '' : 's'}, ${money(tc, true, true)} in ${filtTxt()}. Impact tags are sample values for this mockup.</p></div>`;
+  if (!n){ box.innerHTML = h + `<p class="dnote">No decision packages match these toggles here.</p>`; return; }
+
+  if (V.level === 'program'){
+    const subs = programSubs();
+    const bySp = (rs, k) => sumv(rs.filter(r => r[5] === k));
+    const progBase = D.bci.filter(r => keepRow(r) && r[0] === st.bu && r[1] === st.pg);
+    const progReq = D.dr.filter(r => keepRow(r) && siOK(r) && r[0] === st.bu && r[1] === st.pg);
+    const sumRows = subs.map(k => ({k, b: bySp(progBase, k), c: bySp(progReq, k), n: nDP(progReq.filter(r => r[5] === k))})).filter(x => x.b || x.c).sort((a,b) => b.b - a.b);
+    if (selSp === null && sumRows.length) h += summaryTable('Sub-program', sumRows.map(x => ({name: D.sp[x.k], ...x})), D.pg[st.pg]);
+    const ids = [...new Set(req.filter(r => r[6]).map(r => r[7]))].sort((a,b) => Math.abs(sumv(req.filter(r => r[7] === b))) - Math.abs(sumv(req.filter(r => r[7] === a))));
+    const LIMD = 6, shown = st.allDP ? ids : ids.slice(0, LIMD);
+    h += shown.map(i => dpCard(i, req.filter(r => r[7] === i), base, selSp !== null ? 'Sub-program' : 'Program', where, 'sp', true)).join('');
+    if (ids.length > LIMD) h += `<button type="button" class="btn" id="dpall" style="align-self:flex-start">${st.allDP ? `Show the ${LIMD} largest requests` : `Show all ${ids.length} requests`}</button>`;
+  } else {
+    const kind = V.level === 'city' ? 'sa' : V.level === 'sa' ? 'bu' : 'pg';
+    h += `<div class="gtools"><button type="button" class="nmore" id="gx">Expand all</button><button type="button" class="nmore" id="gc">Collapse all</button></div>`;
+    h += `<div class="gtable" role="list">${groupHead(KIND[kind].label)}${groups(kind, req, base, '')}</div>`;
+  }
+  box.innerHTML = h;
+  const da = $('dpall'); if (da) da.onclick = () => { st.allDP = !st.allDP; renderDPs(view()); };
+  const gx = $('gx'); if (gx) gx.onclick = () => { box.querySelectorAll('[data-g]').forEach(b => st.openG.add(b.dataset.g)); expandAllDeep(V, req, base); renderDPs(view()); };
+  const gc = $('gc'); if (gc) gc.onclick = () => { st.openG.clear(); renderDPs(view()); };
+  box.querySelectorAll('[data-g]').forEach(b => b.onclick = () => { const k = b.dataset.g; st.openG.has(k) ? st.openG.delete(k) : st.openG.add(k); renderDPs(view()); });
+  box.querySelectorAll('[data-gall]').forEach(b => b.onclick = () => { const k = b.dataset.gall; st.allG.has(k) ? st.allG.delete(k) : st.allG.add(k); renderDPs(view()); });
+  box.querySelectorAll('[data-more]').forEach(b => b.onclick = () => {
+    const t = document.getElementById(b.dataset.more); const c = t.classList.toggle('clamp'); b.textContent = c ? 'Read more' : 'Show less'; });
+}
+// open every nested group path (service area -> bureau) under the current level
+function expandAllDeep(V, req){
+  if (V.level !== 'city') return;
+  new Set(req.map(r => D.buSA[r[0]])).forEach(sa => {
+    st.openG.add('sa' + sa);
+    new Set(req.filter(r => D.buSA[r[0]] === sa).map(r => r[0])).forEach(b => st.openG.add('sa' + sa + '/bu' + b));
+  });
+}
+
+function groupHead(label){
+  return `<div class="grow ghd" aria-hidden="true"><span>${esc(label)}</span><span>Requests</span><span>Adopted</span><span>Decision packages</span><span>With DPs</span><span>Change</span></div>`;
+}
+function groups(kind, req, base, path){
+  const K = KIND[kind];
+  const keys = [...new Set(req.filter(r => r[6]).map(K.key))];
+  const gs = keys.map(k => { const rq = req.filter(r => K.key(r) === k), bs = base.filter(r => K.key(r) === k);
+      return {k, rq, bs, c: sumv(rq), b: sumv(bs), n: nDP(rq)}; })
+    .filter(g => g.n).sort((a,b) => Math.abs(b.c) - Math.abs(a.c));
+  return gs.map(g => {
+    const id = path + kind + g.k, open = st.openG.has(id);
+    let inner = '';
+    if (open){
+      if (K.next === 'cards'){
+        const ids = [...new Set(g.rq.filter(r => r[6]).map(r => r[7]))].sort((a,b) => Math.abs(sumv(g.rq.filter(r => r[7] === b))) - Math.abs(sumv(g.rq.filter(r => r[7] === a))));
+        const LIM = 5, all = st.allG.has(id), shown = all ? ids : ids.slice(0, LIM);
+        inner = shown.map(i => dpCard(i, g.rq.filter(r => r[7] === i), g.bs, K.cardBase, K.name(g.k), kind === 'pg' ? 'sp' : 'pg', kind === 'pg')).join('') +
+          (ids.length > LIM ? `<button type="button" class="btn" data-gall="${id}" style="align-self:flex-start">${all ? `Show the ${LIM} largest` : `Show all ${ids.length} requests in ${esc(K.name(g.k))}`}</button>` : '');
+      } else {
+        inner = `<div class="gtable nested">${groups(K.next, g.rq, g.bs, id + '/')}</div>`;
+      }
+    }
+    return `<div class="gitem${open ? ' open' : ''}" role="listitem">
+      <button type="button" class="grow" data-g="${id}" aria-expanded="${open}">
+        <span class="gname"><span class="car" aria-hidden="true">${open ? '▾' : '▸'}</span>${esc(K.name(g.k))}</span>
+        <span class="gn">${g.n}</span><span>${money(g.b)}</span><span class="${cls(g.c)}">${money(g.c, false, true)}</span><span>${money(g.b + g.c)}</span><span class="z">${chg(g.c, g.b) || '—'}</span>
+      </button>${open ? `<div class="gbody">${inner}</div>` : ''}</div>`;
+  }).join('');
+}
+function summaryTable(label, rows, totalName){
+  const tb = rows.reduce((s,x) => s + x.b, 0), tc = rows.reduce((s,x) => s + x.c, 0);
+  return `<div class="tw"><table class="sumt"><thead><tr><th>${esc(label)}</th><th>Adopted</th><th>Decision packages</th><th>With DPs</th><th>Change</th></tr></thead><tbody>
+    ${rows.map(x => `<tr><td>${esc(x.name)}</td><td>${money(x.b, true)}</td><td class="${cls(x.c)}">${x.c ? money(x.c, true, true) : '—'}</td><td>${money(x.b + x.c, true)}</td><td class="z">${chg(x.c, x.b) || '—'}</td></tr>`).join('')}
+    ${rows.length > 1 ? `<tr class="tot"><td>${esc(totalName)}</td><td>${money(tb, true)}</td><td class="${cls(tc)}">${money(tc, true, true)}</td><td>${money(tb + tc, true)}</td><td>${chg(tc, tb) || '—'}</td></tr>` : ''}
+  </tbody></table></div>`;
+}
+
+// one request: its rows within the current scope, compared with the adopted budget of the scope it is listed under
+function dpCard(i, mine, baseScope, baseLabel, scopeName, split, programScope){
+  const d = D.dp[i];
+  const amt = sumv(mine);
+  const cats = MOI.map(m => ({m, b: sumv(baseScope.filter(r => r[3] === m)), c: sumv(mine.filter(r => r[3] === m))})).filter(x => x.c);
+  const mineSet = new Set(mine);
+  const partial = D.dr.some(r => r[7] === i && r[6] && !mineSet.has(r));
+  const filtered = st.fund !== 'all' || st.measure !== 'total';
+  const keys = [...new Set(mine.map(r => split === 'sp' ? r[5] : r[1]))];
+  const splitLine = keys.length > 1 ? `<p class="dsplit">By ${split === 'sp' ? 'sub-program' : 'program'}: ${keys.map(k => `${esc(split === 'sp' ? D.sp[k] : D.pg[k])} ${money(sumv(mine.filter(r => (split === 'sp' ? r[5] : r[1]) === k)), false, true)}`).join('; ')}.</p>` : '';
+  const sps = new Set(mine.map(r => r[5]));
+  const pos = D.dpos.filter(p => p[0] === i && sps.has(p[1]) && (!programScope || true));
+  const fte = pos.reduce((s,p) => s + p[4], 0);
+  const desc = d.d || 'No description provided.';
+  const real = d.sit && !/^(none|n\/?a|no service impacts?\.?|there (is|are|will be) no)/i.test(d.sit);
+  const tb = sumv(baseScope);
+  const unit = baseLabel.toLowerCase();
+  const tag = programScope
+    ? (partial ? `<span class="ptag" title="The table shows only the part of this request in ${esc(scopeName)}${filtered ? ' that matches the current filters' : ''}. Open the request to see all of it.">Portion in this ${unit}</span>`
+               : `<span class="ptag whole" title="This whole request falls in ${esc(scopeName)}.">Whole request in this ${unit}</span>`)
+    : (partial ? `<span class="ptag" title="Only the part of this request that matches the current fund and budget measure filters is shown.">Portion matching filters</span>` : '');
+  return `<article class="dp">
+    <div class="dtop"><div><h3><a href="#dp-${d.id}" data-dplink="${d.id}">${esc(d.n)}</a>${tag}</h3>
+      <p class="dmeta">DP ${d.id} · ${esc(D.bu[d.b])} · ${esc(d.rt)} · <span class="imp"><span class="${d.si ? 'dot' : 'ring'}" aria-hidden="true"></span>${d.si ? 'Service impact' : 'No service impact'}, ${esc(d.tp)}</span></p></div>
+      <div class="damt ${cls(amt)}">${money(amt, true, true)}${fte ? `<small>${fteS(fte)} FTE</small>` : ''}</div></div>
+    <div class="dbody">
+      <div class="dtext"><p class="clamp" id="dd-${d.id}-${esc(scopeName).replace(/\W+/g,'')}">${esc(desc)}</p>${desc.length > 360 ? `<button type="button" class="nmore" data-more="dd-${d.id}-${esc(scopeName).replace(/\W+/g,'')}">Read more</button>` : ''}
+        ${real ? `<p class="dsi"><b>Service impacts.</b> ${esc(d.sit)}</p>` : ''}</div>
+      <div class="tw"><table><thead><tr><th>Spending category</th><th>${esc(baseLabel)} adopted</th><th>This request</th><th>Change</th></tr></thead><tbody>
+        ${cats.map(x => { const uid = 'c' + (++CXN);
+            const reqCI = groupCI(mine.filter(r => r[3] === x.m), 8), baseCI = groupCI(baseScope.filter(r => r[3] === x.m), 7);
+            const items = [...reqCI].filter(([,v]) => v).sort((a,b) => Math.abs(b[1]) - Math.abs(a[1]));
+            return `<tr class="cat"><td>${cxBtn(uid, esc(D.mo[x.m][1]), items.length)}</td><td>${money(x.b, true)}</td><td class="${cls(x.c)}">${money(x.c, true, true)}</td><td class="z">${chg(x.c, x.b) || '—'}</td></tr>` +
+              items.map(([ci, v]) => { const bv = baseCI.get(ci) || 0; return `<tr class="ci" data-cp="${uid}" hidden><td>${esc(D.ci[ci])}</td><td>${money(bv, true)}</td><td class="${cls(v)}">${money(v, true, true)}</td><td class="z">${chg(v, bv) || '—'}</td></tr>`; }).join(''); }).join('')}
+        <tr class="tot"><td>${esc(baseLabel)} total</td><td>${money(tb, true)}</td><td class="${cls(amt)}">${money(amt, true, true)}</td><td>${chg(amt, tb) || '—'}</td></tr>
+      </tbody></table>
+      ${splitLine}
+      ${pos.length ? `<details class="dpos"><summary>${pos.length} position${pos.length === 1 ? '' : 's'}, ${fteS(fte)} FTE</summary><table><tbody>${pos.map(p => `<tr><td>${esc(p[2])}<small>${esc(p[3])}, ${esc(D.sp[p[1]])}</small></td><td>${fteS(p[4])} FTE</td><td class="${p[5] < 0 ? 'down' : ''}">${money(p[5], true)}</td></tr>`).join('')}</tbody></table></details>` : ''}
+      ${partial ? `<p class="dsplit">The full request is ${money(d.e, false, true)} across all programs and funds.</p>` : ''}
+      <a class="dfull" href="#dp-${d.id}" data-dplink="${d.id}">View the full decision package</a>
+      </div>
+    </div></article>`;
+}
+
+/* ---------- tooltip ---------- */
+function showTip(ev, d, V, kind){
+  if (ev.pointerType === 'touch') return;
+  let rs;
+  if (kind === 'sa') rs = V.all.filter(r => D.buSA[r[0]] === d.k);
+  else if (kind === 'bu') rs = V.all.filter(r => r[0] === d.k);
+  else rs = V.scope.filter(r => leafKey(V)(r) === d.k);
+  const v = total(rs), c = totalC(rs);
+  const cats = [...sumBy(rs, r => r[3])].filter(([,o]) => Math.round(o.v) !== 0).sort((a,b) => Math.abs(b[1].v) - Math.abs(a[1].v)).slice(0,4);
+  const n = new Set(rs.filter(isDP).map(r => r[7])).size;
+  const base = kind === 'sa' ? V.cityTotal : V.nodeTotal;
+  const rel = kind === 'sa' || V.level === 'city' ? 'of City' : V.level === 'sa' ? 'of service area' : V.level === 'program' ? 'of program' : 'of bureau';
+  const dpLine = st.dp === 'all' ? `<div class="m">Adopted ${money(v - c)} · ${n} DP${n === 1 ? '' : 's'} ${money(c, false, true)}</div>`
+    : st.dp === 'dp' ? `<div class="m">Net change from ${n} decision package${n === 1 ? '' : 's'}</div>` : '';
+  tip.innerHTML = `<div class="t">${esc(d.name)}</div>` + (d.tag ? `<div class="m">${esc(d.tag)}</div>` : '') +
+    `<div class="big">${money(v, true, st.dp === 'dp')}</div>` + dpLine + (st.dp !== 'dp' ? `<div class="m">${pct(v, base)} ${rel}</div>` : '') +
+    `<table>${cats.map(([k,o]) => `<tr><td>${esc(D.mo[k][1])}</td><td>${sm(o.v)}</td></tr>`).join('')}</table>` +
+    `<div class="k">${kind === 'leaf' ? 'Select for details' : kind === 'pg' ? 'Select for description, sub-programs and DPs' : kind === 'sa' ? 'Select to open service area' : 'Select to open bureau'}</div>`;
+  tip.hidden = false;
+  const pad = 14, r = tip.getBoundingClientRect();
+  let x = ev.clientX + pad, y = ev.clientY + pad;
+  if (x + r.width > innerWidth - 8) x = ev.clientX - r.width - pad;
+  if (y + r.height > innerHeight - 8) y = ev.clientY - r.height - pad;
+  tip.style.left = Math.max(8, x) + 'px'; tip.style.top = Math.max(8, y) + 'px';
+}
+function hideTip(){ tip.hidden = true; }
+
+/* ---------- navigation ---------- */
+function go(sa, bu){ st.sa = sa; st.bu = bu; st.pg = null; st.sel = null; st.full = false; st.openG.clear(); st.allG.clear(); hideTip(); render(); }
+function goPg(pg){ st.pg = pg; st.sel = null; st.full = false; st.allDP = false; st.openG.clear(); st.allG.clear(); hideTip(); render(); }
+
+document.querySelectorAll('input[name="fund"]').forEach(i => i.addEventListener('change', () => { st.fund = i.value; render(); }));
+document.querySelectorAll('input[name="measure"]').forEach(i => i.addEventListener('change', () => { st.measure = i.value; render(); }));
+document.querySelectorAll('input[name="dp"]').forEach(i => i.addEventListener('change', () => { st.dp = i.value; render(); }));
+document.querySelectorAll('input[name="si"]').forEach(i => i.addEventListener('change', () => { st.si = i.value; st.allDP = false; render(); }));
+document.querySelectorAll('input[name="by"]').forEach(i => i.addEventListener('change', () => { st.by = i.value; st.pg = null; st.sel = null; render(); }));
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && inDP){ $('dpBack').click(); return; }
+  if (e.key === 'Escape'){ if (st.sel){ st.sel = null; render(); } else if (st.pg !== null) go(st.sa, st.bu); else if (st.bu !== null) go(st.sa, null); else if (st.sa !== null) go(null, null); }
+});
+/* ---------- full decision package page (#dp-<id>) ---------- */
+const DPI = Object.fromEntries(D.dp.map((d, i) => [d.id, i]));
+const MO_ORDER = {0:['Beginning Fund Balance','Taxes','Licenses & Permits','Charges for Services','Intergovernmental','Bond & Note Proceeds','Miscellaneous','General Fund Discretionary','General Fund Overhead','Fund Transfers - Revenue','Interagency Revenue','Miscellaneous Fund Allocation'],
+  1:['Personnel','External Materials and Services','Internal Materials and Services','Capital Outlay','Debt Service','Fund Transfers - Expense','Contingency','Reserved for Future Expenditure','Debt Service Reserves','Ending Fund Balance']};
+const td = v => v ? `<td class="${v < 0 ? 'down' : ''}">${money(v, true)}</td>` : `<td class="z">—</td>`;
+const tdT = v => `<td class="${v < 0 ? 'down' : ''}">${money(v, true)}</td>`;
+function balanceTable(d){
+  const L = d.lc; // [account, major object, fund, ci, amount]
+  const vol = {}; L.forEach(([a,mo,f,ci,v]) => vol[f] = (vol[f]||0) + Math.abs(v));
+  const isGFf = f => /\(100000\)$/.test(f);
+  let funds = Object.keys(vol).sort((x,y) => (isGFf(y)-isGFf(x)) || vol[y]-vol[x]);
+  const MAXF = 3, other = funds.length > MAXF + 1 ? funds.slice(MAXF) : [];
+  if (other.length) funds = funds.slice(0, MAXF);
+  const col = f => other.includes(f) ? '__o' : f;
+  const cols = [...funds, ...(other.length ? ['__o'] : [])], tot = cols.length > 1;
+  const S = {}, C = {};
+  L.forEach(([a,mo,f,ci,v]) => { ((S[a] ??= {})[mo] ??= {}); S[a][mo][col(f)] = (S[a][mo][col(f)]||0) + v;
+    (((C[a] ??= {})[mo] ??= {})[ci] ??= {}); C[a][mo][ci][col(f)] = (C[a][mo][ci][col(f)]||0) + v; });
+  const T = a => { const t = {}; Object.values(S[a]||{}).forEach(r => Object.entries(r).forEach(([c,v]) => t[c] = (t[c]||0)+v)); return t; };
+  const rt = r => cols.reduce((s,c) => s + (r[c]||0), 0);
+  const body = a => { const mos = Object.keys(S[a]||{}).sort((x,y) => MO_ORDER[a].indexOf(x) - MO_ORDER[a].indexOf(y));
+    return mos.length ? mos.map(mo => { const uid = 'c' + (++CXN);
+        const items = Object.entries(C[a][mo]).filter(([,r]) => Math.round(rt(r)) || Object.values(r).some(v => v)).sort((x,y) => Math.abs(rt(y[1])) - Math.abs(rt(x[1])));
+        return `<tr class="cat"><td>${cxBtn(uid, esc(mo), items.length)}</td>${cols.map(c => td(S[a][mo][c]||0)).join('')}${tot ? td(rt(S[a][mo])) : ''}</tr>` +
+          items.map(([ci, r]) => `<tr class="ci" data-cp="${uid}" hidden><td>${esc(D.ci[ci])}</td>${cols.map(c => td(r[c]||0)).join('')}${tot ? td(rt(r)) : ''}</tr>`).join(''); }).join('')
+      : `<tr><td>None</td>${cols.map(() => '<td class="z">—</td>').join('')}${tot ? '<td class="z">—</td>' : ''}</tr>`; };
+  const Rv = T(0), Ev = T(1), span = cols.length + 1 + (tot ? 1 : 0);
+  const diff = v => Math.abs(v) < 1 ? `<td class="z">—</td>` : `<td class="off">${money(v, true)}</td>`;
+  const unbalanced = cols.some(c => Math.abs((Rv[c]||0)-(Ev[c]||0)) >= 1);
+  return `<div class="tw"><table><thead><tr><th>Fund</th>${cols.map(c => `<th>${c === '__o' ? `${other.length} other funds` : esc(c)}</th>`).join('')}${tot ? '<th>Total</th>' : ''}</tr></thead><tbody>
+    <tr class="g"><td colspan="${span}">Resources</td></tr>${body(0)}
+    <tr class="tot"><td>Total resources</td>${cols.map(c => tdT(Rv[c]||0)).join('')}${tot ? tdT(rt(Rv)) : ''}</tr>
+    <tr class="g"><td colspan="${span}">Requirements</td></tr>${body(1)}
+    <tr class="tot"><td>Total requirements</td>${cols.map(c => tdT(Ev[c]||0)).join('')}${tot ? tdT(rt(Ev)) : ''}</tr>
+    ${unbalanced ? `<tr class="net"><td>Resources less requirements</td>${cols.map(c => diff((Rv[c]||0)-(Ev[c]||0))).join('')}${tot ? diff(rt(Rv)-rt(Ev)) : ''}</tr>` : ''}
+  </tbody></table></div>${other.length ? `<p class="tnote">Other funds: ${other.map(esc).join('; ')}.</p>` : ''}`;
+}
+
+function renderDPPage(i){
+  const d = D.dp[i], b = d.b, sa = D.buSA[b];
+  const rs = D.dr.filter(r => r[7] === i);
+  // by program and sub-program, all funds
+  const pm = new Map();
+  rs.forEach(r => { const k = r[1] + '|' + r[5]; const o = pm.get(k) || {pg:r[1], sp:r[5], v:0, gf:0}; o.v += r[6]; if (r[2] === GF) o.gf += r[6]; pm.set(k, o); });
+  const fteBy = {}; D.dpos.filter(p => p[0] === i).forEach(p => fteBy[p[1]] = (fteBy[p[1]]||0) + p[4]);
+  const progs = [...pm.values()].filter(o => o.v).sort((a,b) => Math.abs(b.v) - Math.abs(a.v));
+  const tot = progs.reduce((s,o) => s + o.v, 0), totGF = progs.reduce((s,o) => s + o.gf, 0);
+  const cats = D.mo.map((m, k) => ({k, n: m[1], v: rs.filter(r => r[3] === k).reduce((s,r) => s + r[6], 0), cap: rs.filter(r => r[3] === k && r[4] === 1).reduce((s,r) => s + r[6], 0)})).filter(x => x.v);
+  const real = d.sit && !/^(none|n\/?a|no service impacts?\.?|there (is|are|will be) no)/i.test(d.sit);
+  const back = !lastWasTreemap ? 'the treemap' : st.pg !== null ? `${D.bu[st.bu]} › ${D.pg[st.pg]}` : st.bu !== null ? D.bu[st.bu] : st.sa !== null ? D.sa[st.sa] : 'the citywide treemap';
+  const pos = d.pos || [];
+  const pt = pos.reduce((a,p) => (a.f += p[4], a.s += p[5], a.b += p[6], a.t += p[7], a), {f:0,s:0,b:0,t:0});
+  const h = `
+    <button type="button" class="back" id="dpBack">‹ Back to ${esc(back)}</button>
+    <header class="dph"><div>
+      <p class="eyebrow">Decision package ${d.id} · FY 2026-27 Fall Supplemental Budget</p>
+      <h1>${esc(d.n)}</h1>
+      <p class="meta"><span>${esc(D.bu[b])}</span><span>${esc(D.sa[sa])}</span><span>${esc(d.rt)}</span>
+        <span><span class="${d.si ? 'dot' : 'ring'}" aria-hidden="true"></span>${d.si ? 'Service impact' : 'No service impact'}, ${esc(d.tp)} <span class="samp">sample tag</span></span></p></div>
+      <div><div class="num ${tot > 0 ? 'up' : tot < 0 ? 'down' : ''}">${money(tot, false, true)}</div>
+        <div class="cap">Net change in requirements, all funds${totGF ? ` · General Fund ${money(totGF, false, true)}` : ''}${d.fte ? ` · ${fteS(d.fte)} FTE` : ''}</div></div>
+    </header>
+    <div class="dpgrid">
+      <section class="dpcard"><h3>Description</h3><p class="txt">${esc(d.d || 'No description provided.')}</p>
+        <h3>Service impacts</h3><p class="txt${real ? '' : ' none'}">${esc(real ? d.sit : (d.sit || 'None provided.'))}</p>
+        ${d.eq ? `<h3>Equity outcomes and impact tracking</h3><p class="txt">${esc(d.eq)}</p>` : ''}</section>
+      <section class="dpcard"><h2>Programs this request changes</h2><p class="sub">${progs.length} sub-program${progs.length === 1 ? '' : 's'} in ${esc(D.bu[b])}. Select one to open it in the treemap.</p>
+        ${progs.length ? `<div class="tw"><table><thead><tr><th>Program and sub-program</th><th>Change</th><th>General Fund</th><th>FTE</th></tr></thead><tbody>
+          ${progs.map(o => `<tr class="go" data-pg="${o.pg}" data-sp="${o.sp}" tabindex="0"><td><span class="pl">${esc(D.pg[o.pg])}</span><small>${esc(D.sp[o.sp])}</small></td>${tdT(o.v)}${td(o.gf)}<td>${fteBy[o.sp] ? fteS(fteBy[o.sp]) : '<span class="z">—</span>'}</td></tr>`).join('')}
+          ${progs.length > 1 ? `<tr class="tot"><td>Total</td>${tdT(tot)}${tdT(totGF)}<td>${d.fte ? fteS(d.fte) : '—'}</td></tr>` : ''}
+        </tbody></table></div>` : `<p class="tnote">This request only changes resources, so it doesn't change any program's requirements.</p>`}
+        ${cats.length ? `<h3>By spending category</h3><div class="tw"><table><thead><tr><th>Category</th><th>Change</th><th>Capital</th></tr></thead><tbody>
+          ${cats.map(x => { const uid = 'c' + (++CXN);
+              const ci = groupCI(rs.filter(r => r[3] === x.k), 8), capCI = groupCI(rs.filter(r => r[3] === x.k && r[4] === 1), 8);
+              const items = [...ci].filter(([,v]) => v).sort((a,b) => Math.abs(b[1]) - Math.abs(a[1]));
+              return `<tr class="cat"><td>${cxBtn(uid, esc(x.n), items.length)}</td>${tdT(x.v)}${td(x.cap)}</tr>` +
+                items.map(([c, v]) => `<tr class="ci" data-cp="${uid}" hidden><td>${esc(D.ci[c])}</td>${tdT(v)}${td(capCI.get(c) || 0)}</tr>`).join(''); }).join('')}
+          <tr class="tot"><td>Total</td>${tdT(tot)}${tdT(cats.reduce((s,x) => s + x.cap, 0))}</tr></tbody></table></div>` : ''}
+      </section>
+    </div>
+    <section class="dpcard"><h2>Resources and requirements by fund</h2><p class="sub">The full request as entered in BFM, with position costs from the personnel export added to Personnel.</p>${balanceTable(d)}</section>
+    ${pos.length ? `<section class="dpcard"><h2>Positions</h2><p class="sub">${pos.length} position${pos.length === 1 ? '' : 's'}, ${fteS(pt.f)} FTE</p>
+      <div class="tw"><table><thead><tr><th>Position</th><th>Sub-program</th><th>FTE</th><th>Salary</th><th>Benefits and taxes</th><th>Total</th></tr></thead><tbody>
+      ${pos.map(p => `<tr><td>${esc(p[1])}<span class="pj">${esc(p[0])}${p[8] ? ' · ' + esc(p[8]) : ''}</span></td><td style="text-align:left;white-space:normal">${esc(p[9] || '')}</td><td>${fteS(p[4])}</td>${td(p[5])}${td(p[6])}${td(p[7])}</tr>`).join('')}
+      <tr class="tot"><td>Total</td><td></td><td>${fteS(pt.f)}</td>${tdT(pt.s)}${tdT(pt.b)}${tdT(pt.t)}</tr></tbody></table></div></section>` : ''}`;
+  const box = $('dppage'); box.innerHTML = h;
+  $('dpBack').onclick = () => history.length > 1 && lastWasTreemap ? history.back() : (location.hash = '');
+  box.querySelectorAll('tr.go').forEach(tr => {
+    const open = () => { const p = +tr.dataset.pg, s = +tr.dataset.sp; st.sa = sa; st.bu = b; st.pg = p; st.sel = 'u' + s; st.full = false; st.allDP = false; st.panel = false; savedY = 0; location.hash = ''; };
+    tr.onclick = open; tr.onkeydown = e => { if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); open(); } };
+  });
+  document.title = `DP ${d.id}: ${d.n}`;
+}
+
+let savedY = 0, lastWasTreemap = false, inDP = false;
+document.addEventListener('click', e => {
+  const a = e.target.closest('[data-dplink]'); if (!a) return;
+  savedY = scrollY; lastWasTreemap = true;
+});
+function route(){
+  const m = location.hash.match(/^#dp-(\d+)$/);
+  const i = m ? DPI[m[1]] : undefined;
+  if (i !== undefined){
+    inDP = true; hideTip();
+    $('tmview').hidden = true; $('dppage').hidden = false;
+    renderDPPage(i); window.scrollTo(0, 0); $('dpBack').focus({preventScroll:true});
+  } else {
+    const wasDP = inDP; inDP = false;
+    $('dppage').hidden = true; $('tmview').hidden = false;
+    document.title = 'Budget Treemap with DPs';
+    lastLevelKey = ''; render();
+    if (wasDP) requestAnimationFrame(() => window.scrollTo(0, savedY));
+    lastWasTreemap = false;
+  }
+}
+window.addEventListener('hashchange', route);
+let rt; new ResizeObserver(() => { if (inDP) return; clearTimeout(rt); rt = setTimeout(render, 80); }).observe(tm);
+route();
+</script>
